@@ -1,0 +1,145 @@
+
+1.Explain the problem in terms of operating systems concept?
+Ans: In this problem I have used mutex locks which is a locking mechanism used to access a resource.
+Only one task i.e can be a thread or process can acquire the mutex. It includes ownership associated 
+with the mutex as the student access the resource and he is the one to release the resource i.e when
+he comes out of the room from the Teaching Assistant after his doubt clarification. I have also used 
+Semaphores in my program which are simply a non-negative variables and shared between the threads. These
+are used to solve the critical section problem  and also to achieve process synchronization in the 
+multiprocessing environment. I have also used binary semaphores which are called mutex locks which 
+have two values 0 and 1 and its value is always initialized to 1 . These are used to implement critical
+section problem.I have also threads in my program. These are used to achieve Parallelism by dividing a 
+process into multiple threads. For example, in a browser multiple tabs can be a different threads MS WORD also used it.
+
+CODE:
+#include <stdio.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <semaphore.h>
+#include <string.h>
+#define NUM_WAIT_CHAIRS 3
+#define DEFAULT_NUM_STUD 5
+ 
+void* stud_action ( void* stud_id );
+void* ta_actions ();
+ 
+sem_t sem_stud;
+sem_t sem_ta;
+pthread_mutex_t mutex_thread;
+
+int wait_room_chairs [3];
+int num_stud_wait = 0;
+int nxt_seat_pos = 0;
+int nxt_teach_pos = 0;
+int tasleep_flag = 0;
+
+int main( int argc, char **argv ){
+	int i;
+	int student_num ;
+	if (argc > 1 ) {
+		if ( isNumber ( argv[1] ) == 1) {
+			student_num = atoi( argv[1] );
+		}
+		else {
+			printf("Invalid input. Quitting program.");
+			return 0;
+		}
+	}
+	else {
+		student_num = DEFAULT_NUM_STUD;
+	}
+	int student_ids [ student_num ];
+	pthread_t students [ student_num ];
+	pthread_t ta;
+	sem_init( &sem_stud, 0, 0 );
+	sem_init( &sem_ta, 0, 1 );
+	//Create threads.
+	pthread_mutex_init ( &mutex_thread, NULL );
+	pthread_create ( &ta, NULL, ta_actions, NULL );
+	for( i = 0; i < student_num ; i++ )
+	{
+		student_ids [i] = i + 1;
+		pthread_create ( &students[i], NULL, stud_action , (void*) & student_ids [i] );
+	}
+	//Join threads
+	pthread_join (ta, NULL);
+	for( i =0; i < student_num ; i++ )
+	{
+		pthread_join ( students [i],NULL );
+	}
+	return 0;
+}
+void* ta_actions () {
+	printf( "Checking for students.\n" );
+	while( 1 ) {
+		//if students are waiting
+		if ( num_stud_wait > 0 ) {
+			tasleep_flag = 0;
+			sem_wait ( & sem_stud );
+			pthread_mutex_lock ( & mutex_thread );
+			int help_time = rand() % 5;
+			//TA helping student.
+			printf( "Helping a student for %d seconds. Students waiting = %d.\n", help_time , (num_stud_wait- 1) );
+			printf( "Student %d receiving help.\n", wait_room_chairs [ nxt_teach_pos ] );
+			wait_room_chairs [ nxt_teach_pos ]=0;
+			num_stud_wait --;
+			nxt_teach_pos = (nxt_teach_pos + 1 ) % NUM_WAIT_CHAIRS ;
+			sleep( help_time );
+			pthread_mutex_unlock ( & mutex_thread );
+			sem_post ( & sem_ta );
+		}
+		//if no students are waiting
+		else {
+			if ( tasleep_flag == 0 ) {
+				printf( "No students waiting. Sleeping.\n" );
+				tasleep_flag = 1;
+			}
+		}
+	}
+}
+void* stud_action ( void* student_id ) {
+	int id_student = *(int*) student_id;
+	while( 1 ) {
+		//if student is waiting, continue waiting
+		if ( isWaiting ( id_student ) == 1 ) { continue; }
+		//student is programming.
+		int time = rand() % 5;
+		printf( "\tStudent %d is programming for %d seconds.\n", id_student , time );
+		sleep( time );
+		pthread_mutex_lock ( & mutex_thread );
+		if( num_stud_wait < NUM_WAIT_CHAIRS ) {
+			wait_room_chairs[ nxt_seat_pos ] = id_student ;
+			num_stud_wait ++;
+			//student takes a seat in the hallway.
+			printf( "\t\tStudent %d takes a seat. Students waiting = %d.\n", id_student , num_stud_wait );
+			nxt_seat_pos = ( nxt_seat_pos + 1 ) % NUM_WAIT_CHAIRS ;
+			pthread_mutex_unlock ( & mutex_thread );
+			//wake TA if sleeping
+			sem_post ( & sem_stud);
+			sem_wait ( & sem_ta );
+		}
+		else {
+			pthread_mutex_unlock ( & mutex_thread );
+			//No chairs available. Student will try later.
+			printf( "\t\t\tStudent %d will try later.\n", id_student );
+		}
+	}
+}
+int isNumber (char number[])
+{
+    int i;
+		for ( i = 0 ; number [i] != 0; i++ )
+    {
+        if (! isdigit ( number [i]))
+            return 0;
+    }
+    return 1;
+}
+
+int isWaiting ( int student_id ) {
+	int i;
+	for ( i = 0; i < 3; i++ ) {
+		if ( wait_room_chairs [i] == student_id ) { return 1; }
+	}
+	return 0;
+}
